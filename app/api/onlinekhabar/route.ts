@@ -1,9 +1,21 @@
 import * as cheerio from "cheerio";
 
-export async function POST(request: Request) {
+// Cache the route for 1 hour (3600 seconds)
+export const revalidate = 3600;
+
+export async function GET(request: Request) {
   try {
-    const body = await request.json();
-    const { url } = body;
+    const { searchParams } = new URL(request.url);
+    const url = searchParams.get("url");
+
+    console.log(url, "URL");
+
+    if (!url) {
+      return Response.json(
+        { ok: false, error: "URL parameter is required" },
+        { status: 400 }
+      );
+    }
 
     const res = await fetch(url, {
       cache: "force-cache",
@@ -31,9 +43,34 @@ export async function POST(request: Request) {
 
     const postThumbnail = $(".post-thumbnail img").attr("src");
 
-    const imageUrls = $('p[style*="text-align: justify"] img')
-      .map((_, el) => $(el).attr("src"))
-      .get();
+    const images: {
+      src: string;
+      caption: string | null;
+      type: "paragraph" | "figure";
+    }[] = [];
+
+    // 1️⃣ Handle images inside <p style="text-align: justify">
+    $('p[style*="text-align: justify"] img').each((_, el) => {
+      images.push({
+        src: $(el).attr("src") || "",
+        caption: null, // no caption for <p> images
+        type: "paragraph",
+      });
+    });
+
+    // 2️⃣ Handle images inside <figure> (with optional <figcaption>)
+    $("figure").each((_, el) => {
+      const src = $(el).find("img").attr("src") || "";
+      const caption = $(el).find("figcaption").text().trim() || null;
+
+      if (src) {
+        images.push({
+          src,
+          caption,
+          type: "figure",
+        });
+      }
+    });
 
     return Response.json(
       {
@@ -47,24 +84,15 @@ export async function POST(request: Request) {
           newsDescription,
           postTags,
           postThumbnail,
-          imageUrls,
+          images,
         },
       },
       { status: 200 }
     );
   } catch (error) {
-    if (
-      error instanceof Error &&
-      error.message === "Unexpected end of JSON input"
-    ) {
-      return Response.json(
-        { ok: false, error: "Invalid JSON" },
-        { status: 400 }
-      );
-    }
-
+    console.error("Error parsing news:", error);
     return Response.json(
-      { ok: false, error: "Internal server error" },
+      { ok: false, error: "Failed to parse news article" },
       { status: 500 }
     );
   }
