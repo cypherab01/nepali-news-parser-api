@@ -33,7 +33,14 @@ export async function GET(request: Request) {
 
     const excerpt = $(".sgexcerpt p").text().trim();
 
-    const newsDescription = $('p[style*="text-align: justify"], .rich-para')
+    const newsDescription = $(
+      '.ok18-single-post-content-wrap p, p[style*="text-align: justify"], .rich-para'
+    )
+      .filter((_, el) => {
+        const hasText = $(el).text().trim().length > 0;
+        const hasMediaOrLinks = $(el).find("img, a").length > 0;
+        return hasText && !hasMediaOrLinks;
+      })
       .map((_, el) => $(el).text().trim())
       .get();
 
